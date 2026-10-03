@@ -302,6 +302,18 @@ select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid 
 .evlist{margin-top:14px}
 .evlist .arow .muted{font-size:15px}
 
+/* Rewards */
+.reward{border-color:color-mix(in srgb,var(--gold) 45%,var(--line))}
+.rw-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.rw-num{font-size:38px;font-weight:700;color:var(--gold);line-height:1.05;font-variant-numeric:tabular-nums}
+.rw-ar{font-size:26px;color:var(--gold);line-height:1.5}
+.rw-row{display:flex;gap:28px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.rw-row b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.rw-row span{font-size:14px;color:var(--muted)}
+.rw-about{margin-top:12px;font-size:15.5px}
+.rw-about summary{cursor:pointer;color:var(--lapis);font-weight:500}
+.rw-about p{margin:10px 0 0}
+.rw-about .src{color:var(--muted);font-size:14px}
 /* Install helper */
 .inst-banner{position:absolute;left:10px;right:10px;top:64px;z-index:6;display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:10px 8px 10px 12px;box-shadow:0 10px 30px rgba(0,0,0,.14)}
 .inst-banner img{width:40px;height:40px;border-radius:10px;flex:none}
@@ -530,6 +542,14 @@ const store = {
 };
 const OFF = []; { let o=0; for (let s=0;s<114;s++){ OFF.push(o); o += Q[s][4].length; } }
 const TOTAL_AYAHS = 6236;
+/* Letters for the hasanat counter: the written Arabic letters of each ayah (hamza forms, alif wasla and ta marbuta included),
+   without vowel marks, small annotation letters or recitation signs. Al-Baqarah 2:1 (Alif Lam Mim) counts as 3. */
+const LETTER_RE = /[\u0621-\u063A\u0641-\u064A\u0671]/g;
+let LETTERS = null;
+function lettersOf(g){
+  if (!LETTERS){ LETTERS = new Uint16Array(TOTAL_AYAHS); let k = 0; for (let s=0;s<114;s++) for (const v of Q[s][4]) LETTERS[k++] = (v.match(LETTER_RE)||[]).length; }
+  return LETTERS[g];
+}
 const pad2 = n => String(n).padStart(2,'0');
 const dkey = d => d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
 const todayKey = () => dkey(new Date());
@@ -540,7 +560,7 @@ const todayKey = () => dkey(new Date());
 const P = Object.assign({
   theme:'system', view:'mushaf', trans:['en-sahih'], fsAr:store.get('tilawah.size',30), fsTr:17,
   mode:store.get('tilawah.mode','trace'), loc:null, method:'MuslimWorldLeague', madhab:'shafi', hlr:'recommended',
-  hijriAdj:0, mPhrase:0, mTarget:33, t:0
+  hijriAdj:0, mPhrase:0, mTarget:33, showHas:true, t:0
 }, store.get('tilawah.prefs',{}));
 function savePrefs(){ P.t = Date.now(); store.set('tilawah.prefs', P); queueSync(); }
 
@@ -567,7 +587,8 @@ const S = Object.assign({days:{}, cov:'', khatm:0, tas:{}, t:0}, store.get('tila
 if (typeof S.cov !== 'string' || S.cov.length !== TOTAL_AYAHS) S.cov = '0'.repeat(TOTAL_AYAHS);
 let dayAy = store.get('tilawah.dayay', {d:'', l:[]});
 let dayAySet = new Set(dayAy.d === todayKey() ? dayAy.l : []);
-function day(k){ k = k || todayKey(); return S.days[k] || (S.days[k] = {ay:0, sec:0, dh:0, ath:0, lis:0, sets:{}}); }
+const lastHas = {};
+function day(k){ k = k || todayKey(); return S.days[k] || (S.days[k] = {ay:0, sec:0, dh:0, ath:0, lis:0, let:0, sets:{}}); }
 let statsTimer = 0;
 function saveStats(now){
   clearTimeout(statsTimer);
@@ -578,6 +599,9 @@ function markRead(s, a){
   const g = OFF[s-1] + a - 1, k = todayKey();
   if (dayAy.d !== k){ dayAy = {d:k, l:[]}; dayAySet = new Set(); }
   if (!dayAySet.has(g)){ dayAySet.add(g); day().ay++; }
+  // Hasanat: count the letters each time an ayah is finished; going back over it within 30 seconds isn't counted again
+  const now = Date.now();
+  if (now - (lastHas[g]||0) > 30000){ lastHas[g] = now; day().let = (day().let||0) + lettersOf(g); }
   if (S.cov[g] !== '1'){
     S.cov = S.cov.slice(0,g) + '1' + S.cov.slice(g+1);
     if (S.cov.indexOf('0') === -1){ S.khatm++; S.cov = '0'.repeat(TOTAL_AYAHS); toast('Khatmah complete. May Allah accept it from you.'); }
@@ -1476,15 +1500,30 @@ function renderStats(){
   let allAy = 0, allSec = 0, allDh = 0, allLis = 0; Object.values(S.days).forEach(x => { allAy += x.ay||0; allSec += x.sec||0; allDh += x.dh||0; allLis += x.lis||0; });
   const kp = (v,l) => '<div class="kpi"><b>'+v+'</b><span>'+l+'</span></div>';
   const st = streak();
+  // today's letters from before this feature existed: rebuild from the ayahs already read today
+  if (t.let === undefined || (t.let === 0 && t.ay > 0 && dayAySet.size)){ let n = 0; dayAySet.forEach(g => { n += lettersOf(g); }); t.let = n; saveStats(); }
+  const wk = days.reduce((n,d) => n + ((S.days[dkey(d)]||{}).let||0), 0);
+  let allLet = 0; Object.values(S.days).forEach(x => { allLet += x.let||0; });
+  const fmt = n => n.toLocaleString();
   let h = '<div class="card streak"><div class="big">'+st+'</div><div><b>'+(st === 1 ? 'day' : 'days')+' in a row</b><div class="small muted">'+
     (st ? 'Read a little every day to keep it going.' : 'Read with your finger on the page and your streak starts today.')+'</div></div></div>';
+  if (P.showHas === false && chartMetric === 'has') chartMetric = 'ay';
+  if (P.showHas !== false) h += '<h2 class="sec">Rewards</h2><div class="card reward"><div class="rw-top"><div><div class="rw-num">'+fmt((t.let||0)*10)+'</div>'+
+    '<div class="small muted">hasanat today, from '+fmt(t.let||0)+' letters read</div></div><div class="ar rw-ar" dir="rtl" lang="ar">حَسَنَات</div></div>'+
+    '<div class="rw-row"><div><b>'+fmt(wk*10)+'</b><span>this week</span></div><div><b>'+fmt(allLet*10)+'</b><span>all time</span></div></div>'+
+    '<details class="rw-about"><summary>Where this comes from</summary>'+
+    '<p>Abdullah ibn Mas\'ud reported that the Messenger of Allah ﷺ said: "Whoever reads a letter from the Book of Allah receives a good deed for it, and a good deed is multiplied ten times. I do not say that Alif Lam Mim is one letter; rather Alif is a letter, Lam is a letter and Mim is a letter."</p>'+
+    '<p class="src">Jami\' at-Tirmidhi 2910. At-Tirmidhi graded it hasan sahih; al-Albani graded it sahih.</p>'+
+    '<p><b>How it\'s counted.</b> Each Arabic letter in the ayahs you trace counts as ten hasanat, exactly as in the hadith: Alif Lam Mim (2:1) counts as 3 letters, 30 hasanat. Vowel marks and small recitation signs are not counted as letters. An ayah counts each time you finish reading it, but going back over it within half a minute isn\'t counted twice. Listening is not included, since the hadith speaks of reading.</p>'+
+    '<p>The Prophet ﷺ also said that one who recites the Quran with difficulty, struggling over it, receives a double reward. <span class="src">(Sahih al-Bukhari 4937, Sahih Muslim 798)</span></p>'+
+    '<p>This counter is an encouragement, not a measure. The reward is with Allah, and He multiplies it for whom He wills (Al-Baqarah 2:261). Allah knows best.</p></details></div>';
   h += '<h2 class="sec">Today</h2><div class="kpis'+(AUDIO?' four':'')+'">'+kp(t.ay,'ayahs read')+kp(Math.round(t.sec/60),'minutes reading')+
     (AUDIO ? kp(Math.round((t.lis||0)/60),'minutes listening') : '')+kp(t.dh,'dhikr counted')+'</div>';
-  const vals = days.map(d => { const x = S.days[dkey(d)] || {}; return (chartMetric === 'sec' || chartMetric === 'lis') ? Math.round((x[chartMetric]||0)/60) : (x[chartMetric]||0); });
+  const vals = days.map(d => { const x = S.days[dkey(d)] || {}; return chartMetric === 'has' ? (x.let||0)*10 : (chartMetric === 'sec' || chartMetric === 'lis') ? Math.round((x[chartMetric]||0)/60) : (x[chartMetric]||0); });
   const max = Math.max(1, ...vals);
   h += '<h2 class="sec">Last 7 days</h2><div class="card"><div class="seg wide" role="group">'+
-    [['ay','Ayahs'],['sec','Reading'],...(AUDIO?[['lis','Listening']]:[]),['dh','Dhikr']].map(m => '<button data-metric="'+m[0]+'" aria-pressed="'+(chartMetric===m[0])+'">'+m[1]+'</button>').join('')+'</div><div class="chart">'+
-    days.map((d,i) => '<div class="c'+(i===6?' today':'')+'"><span class="v">'+vals[i]+'</span><span class="bar-v" style="height:'+(vals[i]/max*100)+'%"></span><span class="lb">'+d.toLocaleDateString([], {weekday:'short'}).slice(0,3)+'</span></div>').join('')+'</div></div>';
+    [['ay','Ayahs'],...(P.showHas !== false ? [['has','Hasanat']] : []),['sec','Reading'],...(AUDIO?[['lis','Listening']]:[]),['dh','Dhikr']].map(m => '<button data-metric="'+m[0]+'" aria-pressed="'+(chartMetric===m[0])+'">'+m[1]+'</button>').join('')+'</div><div class="chart">'+
+    days.map((d,i) => '<div class="c'+(i===6?' today':'')+'"><span class="v">'+(vals[i] >= 10000 ? (vals[i]/1000).toFixed(vals[i] >= 100000 ? 0 : 1)+'k' : vals[i])+'</span><span class="bar-v" style="height:'+(vals[i]/max*100)+'%"></span><span class="lb">'+d.toLocaleDateString([], {weekday:'short'}).slice(0,3)+'</span></div>').join('')+'</div></div>';
   h += '<h2 class="sec">Khatmah</h2><div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:22px">'+(covered/TOTAL_AYAHS*100).toFixed(1)+'%</b><span class="muted small">'+covered.toLocaleString()+' of 6,236 ayahs</span></div>'+
     '<div class="big-prog"><i style="width:'+(covered/TOTAL_AYAHS*100)+'%"></i></div><div class="small muted">'+surahsDone+' of 114 surahs fully read'+(S.khatm ? ', '+S.khatm+' khatmah completed' : '')+'. Ayahs count when you trace through them.</div></div>';
   h += '<h2 class="sec">Athkar this week</h2><div class="card" style="padding:6px 16px">';
@@ -1567,6 +1606,8 @@ function renderCal(){
 }
 function renderSettings(){
   let h = themeField();
+  h += '<div class="field"><span class="lbl">Rewards counter</span><label class="chk" style="margin:0 -6px"><input type="checkbox" id="setHas"'+(P.showHas !== false ? ' checked' : '')+'><span class="who">Show hasanat on the Progress tab</span></label>'+
+    '<div class="help">When this is off, the counter and its chart are hidden. Your reading is still recorded on this device, so turning it back on shows your full count.</div></div>';
   h += '<div class="field"><span class="lbl">Hijri date adjustment</span><div class="stepper"><button data-hadj="-1" aria-label="One day earlier">−</button><output>'+(P.hijriAdj>0?'+':'')+P.hijriAdj+'</output><button data-hadj="1" aria-label="One day later">+</button></div>'+
     '<div class="help">Today shows as '+esc(hijriStr(new Date()))+'. Match it to your local mosque\'s announcement.</div></div>';
   h += '<div class="field"><span class="lbl">Prayer times</span><button class="btn small" data-open-pset="1">Calculation method and Asr</button> <button class="btn small" data-open-loc="1">Location</button></div>';
@@ -1611,6 +1652,9 @@ $('#moreBody').addEventListener('click', e => {
   }
 });
 $('#moreBody').addEventListener('input', e => { if (e.target.id === 'nameQ'){ more.nameQ = e.target.value; renderNames(); } });
+$('#moreBody').addEventListener('change', e => {
+  if (e.target.id === 'setHas'){ P.showHas = e.target.checked; savePrefs(); toast(P.showHas ? 'Rewards counter shown' : 'Rewards counter hidden'); }
+});
 
 /* =========================================================
    Sync across devices (signed-in viewers)
@@ -1631,7 +1675,7 @@ function mergeStats(a, b){
   const r = {days:{}, khatm:Math.max(a.khatm||0, b.khatm||0), tas:{}, t:Math.max(a.t||0, b.t||0), reset:Math.max(a.reset||0, b.reset||0)};
   new Set([...Object.keys(a.days||{}), ...Object.keys(b.days||{})]).forEach(k => {
     const x = (a.days||{})[k] || {}, y = (b.days||{})[k] || {};
-    r.days[k] = {ay:Math.max(x.ay||0,y.ay||0), sec:Math.max(x.sec||0,y.sec||0), lis:Math.max(x.lis||0,y.lis||0), dh:Math.max(x.dh||0,y.dh||0), ath:Math.max(x.ath||0,y.ath||0), sets:Object.assign({}, y.sets||{}, x.sets||{})};
+    r.days[k] = {ay:Math.max(x.ay||0,y.ay||0), sec:Math.max(x.sec||0,y.sec||0), lis:Math.max(x.lis||0,y.lis||0), let:Math.max(x.let||0,y.let||0), dh:Math.max(x.dh||0,y.dh||0), ath:Math.max(x.ath||0,y.ath||0), sets:Object.assign({}, y.sets||{}, x.sets||{})};
   });
   new Set([...Object.keys(a.tas||{}), ...Object.keys(b.tas||{})]).forEach(k => { r.tas[k] = Math.max((a.tas||{})[k]||0, (b.tas||{})[k]||0); });
   const ca = a.cov && a.cov.length === TOTAL_AYAHS ? a.cov : '0'.repeat(TOTAL_AYAHS), cb = b.cov && b.cov.length === TOTAL_AYAHS ? b.cov : '0'.repeat(TOTAL_AYAHS);
