@@ -10,7 +10,8 @@ Open privacy.html in a text editor (Notepad or TextEdit). Near the bottom, repla
 ## 2. Put it on GitHub Pages
 1. Sign up or sign in at github.com. Note your username.
 2. Click **+** (top right), then **New repository**.
-   - Repository name must be exactly: `YOUR-USERNAME.github.io` (your real username, all lowercase).
+   - Repository name: `YOUR-USERNAME.github.io` (your real username, all lowercase).
+     Any name works for installing on phones, but the Google Play version needs this exact name.
    - Choose **Public**. Click **Create repository**.
 3. Click **uploading an existing file**. Drag in everything from this folder, including the
    **fonts** folder. Click **Commit changes**.
