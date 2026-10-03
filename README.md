@@ -1,32 +1,33 @@
-# Tilawah: putting it online with GitHub Pages (free)
+# Tilawah website (needed for both store apps)
 
-You'll need a computer for the upload. It takes about 10 minutes.
+The store apps open this website inside a native app shell, so it has to be online first.
+You'll need a computer. It takes about 15 minutes.
 
-1. Unzip this folder. You should see 7 files: index.html, sw.js, manifest.webmanifest, three icon images and this README.
-2. Go to github.com and sign up for a free account (or sign in).
-3. Click the **+** at the top right, then **New repository**.
-   - Repository name: `tilawah`
-   - Choose **Public** (free GitHub Pages needs this; the page holds no personal data).
-   - Click **Create repository**.
-4. On the next page, click the link **uploading an existing file**.
-   Drag all the files from the unzipped folder into the box (the files themselves, not the folder). Click **Commit changes**.
-5. Open the repository's **Settings** tab, then **Pages** in the left menu.
-   Under "Build and deployment", set Source to **Deploy from a branch**, Branch to **main** and folder to **/ (root)**. Click **Save**.
-6. Wait a minute or two and refresh the page. Your link appears at the top:
-   `https://YOUR-USERNAME.github.io/tilawah/`
+## 1. Fill in the privacy policy
+Open privacy.html in a text editor (Notepad or TextEdit). Near the bottom, replace
+[YOUR NAME] and [YOUR EMAIL ADDRESS] with the name and email you want shown publicly. Save.
 
-## Put it on your phone's home screen
-- **iPhone (Safari):** open the link, tap Share, then **Add to Home Screen**.
-- **Android (Chrome):** open the link, tap the menu, then **Install app** or **Add to Home screen**.
+## 2. Put it on GitHub Pages
+1. Sign up or sign in at github.com. Note your username.
+2. Click **+** (top right), then **New repository**.
+   - Repository name must be exactly: `YOUR-USERNAME.github.io` (your real username, all lowercase).
+   - Choose **Public**. Click **Create repository**.
+3. Click **uploading an existing file**. Drag in everything from this folder, including the
+   **fonts** folder. Click **Commit changes**.
+4. Click **Add file**, then **Create new file**. Name it `.nojekyll` (with the dot), leave it empty,
+   and click **Commit changes**. This lets GitHub serve the app-verification file in step 3 of the store guide.
+5. Go to **Settings**, then **Pages**. Set Source to **Deploy from a branch**, Branch **main**,
+   folder **/ (root)**, then **Save**.
+6. After a couple of minutes, open `https://YOUR-USERNAME.github.io/` on your phone to check it works.
+   The privacy policy is at `https://YOUR-USERNAME.github.io/privacy.html`.
 
-It then opens full screen like an app. The Quran text, athkar and prayer times work offline after the first visit. Recitations and newly chosen translations need a connection.
+## 3. Install it on phones (no store needed)
+Anyone can install the app straight from the website, on iPhone or Android:
+- When the site opens in Safari or Chrome, an **Install Tilawah** banner appears. Tap **Install**.
+  - On Android, Chrome asks to confirm; tap **Install**.
+  - On iPhone, the app shows the steps: tap Share, then **Add to Home Screen**, then **Add**.
+- If the banner was closed, go to **More**, then **Add Tilawah to your home screen**.
 
-## Updating later
-Upload a new index.html to the same repository (Add file, then Upload files). The site updates within a couple of minutes.
-
-## Quicker alternative: Netlify Drop
-Go to app.netlify.com/drop and drag the unzipped folder onto the page. You get a link straight away; create a free account when prompted so the site isn't deleted after an hour.
-
-## Good to know
-- Your reading place, statistics and settings are stored on your phone, separately from the claude.ai version, so this copy starts fresh.
-- Recitations stream from EveryAyah.com. Translations load from the open quran-api dataset on jsDelivr.
+## Updating the app later
+Upload a new index.html to the repository. Both store apps pick up the change within minutes,
+without a new store submission.
