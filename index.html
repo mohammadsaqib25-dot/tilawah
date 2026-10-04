@@ -85,6 +85,12 @@ h2.sec{font-size:18px;margin:22px 2px 10px}
 h2.sec:first-child{margin-top:4px}
 
 /* ---------- Reader ---------- */
+/* Back to reading place */
+.backpill{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:8px;padding:10px 18px 10px 14px;border-radius:999px;
+  background:var(--lapis);color:var(--on-lapis);font-weight:500;font-size:16px;box-shadow:0 8px 24px rgba(0,0,0,.22);white-space:nowrap;animation:pillIn .2s ease-out}
+.backpill svg{width:18px;height:18px}
+@keyframes pillIn{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+@media (prefers-reduced-motion:reduce){.backpill{animation:none}}
 /* Trace-mode scroll bar */
 .readwrap{flex:1;min-height:0;position:relative;display:flex;flex-direction:column}
 .srail{position:absolute;top:8px;bottom:8px;right:0;width:32px;z-index:4;touch-action:none;cursor:pointer;-webkit-user-select:none;user-select:none}
@@ -399,6 +405,8 @@ select.chip{font-size:15px;padding:7px 10px}
   <symbol id="i-next" viewBox="0 0 24 24"><path d="M6 6l8 6-8 6z" fill="currentColor"/><path d="M17.5 6v12"/></symbol>
   <symbol id="i-bm" viewBox="0 0 24 24"><path d="M6.5 3.5h11a1 1 0 0 1 1 1v16l-6.5-4.5-6.5 4.5v-16a1 1 0 0 1 1-1z"/></symbol>
   <symbol id="i-bm-fill" viewBox="0 0 24 24"><path d="M6.5 3.5h11a1 1 0 0 1 1 1v16l-6.5-4.5-6.5 4.5v-16a1 1 0 0 1 1-1z" fill="currentColor"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
   <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3l2.2 3.8 4.3-.7-.7 4.3L21.6 12l-3.8 2.2.7 4.3-4.3-.7L12 21.6l-2.2-3.8-4.3.7.7-4.3L2.4 12l3.8-2.2-.7-4.3 4.3.7z"/></symbol>
 </svg>
 
@@ -432,6 +440,7 @@ select.chip{font-size:15px;padding:7px 10px}
         <div class="sthumb" id="sthumb"></div>
         <div class="sbubble" id="sbubble"></div>
       </div>
+      <button class="backpill" id="backPill" hidden><svg class="i" id="backArrow"><use href="#i-updown"/></svg><span id="backTxt">Back to where you stopped</span></button>
     </div>
     <div class="player" id="player" hidden>
       <button class="rec" id="plRec" aria-label="Reciter and listening options"><b id="plRecName">Reciter</b><span id="plWhere"></span></button>
@@ -787,8 +796,11 @@ function render(s){
   markBms();
   if (!scriptReady()){
     const want = P.script;
-    loadScript(want).then(() => { if (P.script === want && curS === s){ const at = curEl ? {a:+curEl.dataset.a, i:+curEl.dataset.i} : (perSurah[s] || null); const st = reader.scrollTop; openSurah(s, at, {save:false}); if (!at) reader.scrollTop = st; } })
-      .catch(() => toast('The '+(want==='indopak'?'IndoPak':'Tajweed')+' script didn\'t load. Check your connection.'));
+    loadScript(want).then(() => {
+      if (P.script !== want || curS !== s) return;
+      try{ const at = curEl ? {a:+curEl.dataset.a, i:+curEl.dataset.i} : (perSurah[s] || null); const st = reader.scrollTop; openSurah(s, at, {save:false}); if (!at) reader.scrollTop = st; }
+      catch(err){ console.error(err); toast('Couldn\'t show the '+(want==='indopak'?'IndoPak':'Tajweed')+' script: '+err.message); }
+    }, e => toast(dataError('The '+(want==='indopak'?'IndoPak':'Tajweed')+' script', e)));
   }
 }
 
@@ -966,7 +978,26 @@ function updateRail(){
   srail.setAttribute('aria-valuenow', Math.round(reader.scrollTop / g.max * 100));
   return {g, top};
 }
-reader.addEventListener('scroll', () => { if (!railRaf) railRaf = requestAnimationFrame(() => { railRaf = 0; updateRail(); if (railDrag) railLabel(); }); }, {passive:true});
+reader.addEventListener('scroll', () => { if (!railRaf) railRaf = requestAnimationFrame(() => { railRaf = 0; updateRail(); if (railDrag) railLabel(); updateBackPill(); }); }, {passive:true});
+
+/* "Back to ayah N": shown when your reading place has scrolled off screen */
+const backPill = $('#backPill');
+function updateBackPill(){
+  if (!curEl || !curEl.isConnected || qView !== 'reader' || tracking || (typeof AU !== 'undefined' && AU.on && P.follow)){ backPill.hidden = true; return; }
+  const rr = reader.getBoundingClientRect(), r = curEl.getBoundingClientRect();
+  const above = r.bottom < rr.top + 10, below = r.top > rr.bottom - 10;
+  if (!above && !below){ backPill.hidden = true; return; }
+  $('#backTxt').textContent = 'Back to ayah ' + curEl.dataset.a;
+  $('#backArrow').innerHTML = '<use href="#' + (above ? 'i-up' : 'i-down') + '"/>';
+  backPill.setAttribute('aria-label', 'Back to where you stopped reading, ayah ' + curEl.dataset.a);
+  backPill.hidden = false;
+}
+backPill.addEventListener('click', () => {
+  if (!curEl) return;
+  backPill.hidden = true;
+  scrollToEl(curEl, 0.32, true); placeBand();
+  curEl.classList.add('flash'); setTimeout(() => curEl && curEl.classList.remove('flash'), 1600);
+});
 window.addEventListener('resize', () => updateRail());
 function ayahInView(){
   const rr = reader.getBoundingClientRect(), y = rr.top + reader.clientHeight * 0.3;
@@ -1841,24 +1872,30 @@ P.aq = P.aq || 'hi'; P.rep = P.rep || 1; P.endAct = P.endAct || 'next'; P.rate =
 const AU = {on:false, s:1, a:1, rep:0, basmala:false, retry:0, el:null, pre:null, lastT:0, userAt:0};
 const recById = id => REC.find(r => r.id === id) || REC[0];
 function audioUrl(s, a){ const r = recById(P.rec), f = (P.aq === 'lo' && r.lo) ? r.lo : r.hi; return 'https://everyayah.com/data/'+f+'/'+pad3(s)+pad3(a)+'.mp3'; }
-function auEl(){
-  if (AU.el) return AU.el;
-  const el = AU.el = new Audio(); el.preload = 'auto';
-  AU.pre = new Audio(); AU.pre.preload = 'auto';
-  el.addEventListener('ended', onEnded);
-  el.addEventListener('playing', () => { AU.retry = 0; setPlayIcon(); });
-  el.addEventListener('pause', setPlayIcon);
-  el.addEventListener('error', () => {
-    if (!AU.on || (el.src || '').indexOf('data:') === 0) return;
-    if (AU.retry < 1){ AU.retry++; setTimeout(() => { if (AU.on) loadAndPlay(); }, 1500); return; }
-    stopListen(false); toast('The recitation didn\'t load. Check your connection or choose another reciter.');
+function setSrc(el, src){ if (el._obj && el._obj !== src) URL.revokeObjectURL(el._obj); el._obj = src.indexOf('blob:') === 0 ? src : null; el.src = src; }
+function auEls(){
+  if (AU.els) return AU.els;
+  AU.els = [new Audio(), new Audio()];
+  AU.els.forEach(el => {
+    el.preload = 'auto';
+    el.addEventListener('ended', () => { if (el === AU.el) onEnded(); });
+    el.addEventListener('playing', () => { if (el === AU.el){ AU.retry = 0; setPlayIcon(); } });
+    el.addEventListener('pause', () => { if (el === AU.el) setPlayIcon(); });
+    el.addEventListener('error', () => {
+      if (el !== AU.el || !AU.on || (el.src || '').indexOf('data:') === 0) return;
+      if (AU.retry < 1){ AU.retry++; AU.prep = null; setTimeout(() => { if (AU.on) playItem(AU.cur); }, 1500); return; }
+      stopListen(false); toast('The recitation didn\'t load. Check your connection or choose another reciter.');
+    });
+    el.addEventListener('timeupdate', () => {
+      if (el !== AU.el) return;
+      const t = el.currentTime, dt = t - AU.lastT; AU.lastT = t;
+      if (dt > 0 && dt < 2){ day().lis = (day().lis||0) + dt * (el.playbackRate||1); if (Math.random() < .08) saveStats(); }
+    });
   });
-  el.addEventListener('timeupdate', () => {
-    const t = el.currentTime, dt = t - AU.lastT; AU.lastT = t;
-    if (dt > 0 && dt < 2){ day().lis = (day().lis||0) + dt * (el.playbackRate||1); if (Math.random() < .08) saveStats(); }
-  });
-  return el;
+  AU.el = AU.els[0];
+  return AU.els;
 }
+function auEl(){ auEls(); return AU.el; }
 function setPlayIcon(){
   const b = $('#plPlay'); if (!b) return;
   const playing = AU.el && !AU.el.paused;
@@ -1871,27 +1908,67 @@ function updatePlayerText(){
   $('#plRecName').textContent = recById(P.rec).name;
   $('#plWhere').textContent = AU.basmala ? Q[AU.s-1][1]+', basmala' : Q[AU.s-1][1]+' '+AU.s+':'+AU.a + (P.rep > 1 ? ', each ayah '+P.rep+' times' : '');
 }
-function loadAndPlay(){
-  const el = auEl(), url = AU.basmala ? audioUrl(1,1) : audioUrl(AU.s, AU.a), tok = AU.tok = (AU.tok||0) + 1;
-  sayHighlight(true); updatePlayerText(); mediaMeta();
+const itemUrl = it => it.basmala ? audioUrl(1,1) : audioUrl(it.s, it.a);
+/* What plays after this item: the ayah again (repeat setting), the next ayah, or the next surah's basmala */
+function nextItem(it){
+  if (!it) return null;
+  if (it.basmala) return {s:it.s, a:it.a, basmala:false, rep:0};
+  if (it.rep + 1 < P.rep) return {s:it.s, a:it.a, basmala:false, rep:it.rep+1};
+  let s = it.s, a = it.a + 1;
+  if (a > Q[s-1][4].length){
+    if (P.endAct === 'stop') return null;
+    if (P.endAct === 'repeat') a = 1;
+    else if (s < 114){ s++; a = 1; } else return null;
+    return {s, a, basmala: s !== 1 && s !== 9, rep:0};
+  }
+  return {s, a, basmala:false, rep:0};
+}
+function setCur(it){ AU.cur = it; AU.s = it.s; AU.a = it.a; AU.basmala = it.basmala; AU.rep = it.rep; }
+/* Start an item. If the other player already holds it, start that one at once: no loading pause. */
+function playItem(it){
+  auEls(); setCur(it);
+  const tok = AU.tok = (AU.tok||0) + 1, url = itemUrl(it);
+  const go = el => {
+    el.defaultPlaybackRate = P.rate; el.playbackRate = P.rate; AU.lastT = 0;
+    const p = el.play(); if (p && p.catch) p.catch(() => setPlayIcon());
+    afterStart(it, tok);
+  };
+  if (AU.prep && AU.prep.url === url && AU.prep.el.src){
+    const old = AU.el; AU.el = AU.prep.el; AU.prep = null;
+    if (old !== AU.el) old.pause();
+    go(AU.el);
+  } else {
+    AU.prep = null;
+    const el = AU.el;
+    audioSrc(url).then(src => { if (tok !== AU.tok || !AU.on) return; setSrc(el, src); go(el); });
+  }
+}
+function afterStart(it, tok){
+  prepareNext(it, tok);
+  // page updates come after the sound has started, so a long surah being drawn can't delay it
+  setTimeout(() => {
+    if (tok !== AU.tok) return;
+    if (it.s !== curS && qView === 'reader') openSurah(it.s, null, {save:false});
+    sayHighlight(true); updatePlayerText(); mediaMeta(); setPlayIcon();
+  }, 30);
+}
+function prepareNext(it, tok){
+  const n = nextItem(it); if (!n) return;
+  const el = AU.els[0] === AU.el ? AU.els[1] : AU.els[0], url = itemUrl(n);
   audioSrc(url).then(src => {
-    if (tok !== AU.tok || !AU.on) return;
-    el.src = src; el.defaultPlaybackRate = P.rate; el.playbackRate = P.rate; AU.lastT = 0;
-    const pr = el.play(); if (pr && pr.catch) pr.catch(() => setPlayIcon());
-    if (src === url) preloadNext();
+    if (tok !== AU.tok) return;
+    if (el.src !== src) setSrc(el, src);
+    el.preload = 'auto'; try{ el.load(); }catch(e){}
+    AU.prep = {url, el};
   });
 }
-function preloadNext(){
-  if (AU.basmala) { AU.pre.src = audioUrl(AU.s, AU.a); return; }
-  const tot = Q[AU.s-1][4].length;
-  if (AU.a < tot) AU.pre.src = audioUrl(AU.s, AU.a+1);
-  else if (AU.s < 114 && P.endAct === 'next') AU.pre.src = audioUrl(AU.s+1, 1);
-}
+function loadAndPlay(){ playItem(AU.cur || {s:AU.s, a:AU.a, basmala:AU.basmala, rep:AU.rep||0}); }
+function preloadNext(){}
 function mediaMeta(){
   if (!('mediaSession' in navigator)) return;
   try{
     navigator.mediaSession.metadata = new MediaMetadata({title: Q[AU.s-1][1]+' '+AU.s+':'+AU.a, artist: recById(P.rec).name, album:'The Quran'});
-    navigator.mediaSession.setActionHandler('play', () => AU.el && AU.el.play());
+    navigator.mediaSession.setActionHandler('play', () => { const p = AU.el && AU.el.play(); if (p && p.catch) p.catch(() => {}); });
     navigator.mediaSession.setActionHandler('pause', () => AU.el && AU.el.pause());
     navigator.mediaSession.setActionHandler('previoustrack', () => step(-1));
     navigator.mediaSession.setActionHandler('nexttrack', () => step(1));
@@ -1899,33 +1976,23 @@ function mediaMeta(){
 }
 function playFrom(s, a){
   unlockAudio();
-  AU.on = true; AU.s = s; AU.a = a; AU.rep = 0; AU.retry = 0;
-  AU.basmala = a === 1 && s !== 1 && s !== 9;
+  AU.on = true; AU.retry = 0; AU.prep = null;
   if (curS !== s) openSurah(s, null, {save:false});
-  showPlayer(true); loadAndPlay();
+  showPlayer(true);
+  playItem({s, a, basmala: a === 1 && s !== 1 && s !== 9, rep:0});
 }
 function onEnded(){
   if (!AU.on) return;
-  if (AU.basmala){ AU.basmala = false; loadAndPlay(); return; }
-  AU.rep++;
-  if (AU.rep < P.rep){ AU.el.currentTime = 0; AU.el.play(); return; }
-  AU.rep = 0; step(1, true);
+  const n = nextItem(AU.cur);
+  if (!n){ const s = AU.s; stopListen(true); toast(s === 114 && P.endAct !== 'stop' ? 'End of the Quran' : 'End of '+Q[s-1][1]); return; }
+  playItem(n);
 }
-function step(d, auto){
+function step(d){
   if (!AU.on) return;
-  AU.rep = 0; AU.basmala = false;
-  let s = AU.s, a = AU.a + d;
-  const tot = Q[s-1][4].length;
-  if (a > tot){
-    if (auto && P.endAct === 'stop'){ stopListen(true); toast('End of '+Q[s-1][1]); return; }
-    if (auto && P.endAct === 'repeat') a = 1;
-    else if (s < 114){ s++; a = 1; }
-    else { stopListen(true); toast('End of the Quran'); return; }
-    AU.basmala = s !== 1 && s !== 9;
-  }
+  let s = AU.s, a = AU.basmala && d > 0 ? AU.a : AU.a + d;
+  if (a > Q[s-1][4].length){ if (s < 114){ s++; a = 1; playItem({s, a, basmala: s !== 9, rep:0}); return; } stopListen(true); toast('End of the Quran'); return; }
   if (a < 1){ if (s > 1){ s--; a = Q[s-1][4].length; } else a = 1; }
-  if (s !== curS){ AU.s = s; AU.a = a; openSurah(s, null, {save:false}); }
-  AU.s = s; AU.a = a; loadAndPlay();
+  playItem({s, a, basmala:false, rep:0});
 }
 function sayHighlight(scroll){
   content.querySelectorAll('.say').forEach(e => e.classList.remove('say'));
@@ -1945,7 +2012,7 @@ function audioAfterRender(){ if (AU.on) sayHighlight(true); }
 function audioTapEnd(endEl){ if (!AU.on) return false; playFrom(curS, +endEl.dataset.a); return true; }
 function showPlayer(on){ $('#player').hidden = !on; $('#openListen').classList.toggle('on', on); if (on) updatePlayerText(); setPlayIcon(); requestAnimationFrame(placeBand); }
 function stopListen(hide){
-  AU.on = false; if (AU.el){ AU.el.pause(); }
+  AU.on = false; AU.tok = (AU.tok||0) + 1; AU.prep = null; if (AU.els) AU.els.forEach(el => el.pause());
   content.querySelectorAll('.say').forEach(e => e.classList.remove('say'));
   if (hide) showPlayer(false); else setPlayIcon();
   saveStats();
@@ -1956,7 +2023,7 @@ function startListen(){ playFrom(curS, curEl ? +curEl.dataset.a : 1); }
 if (AUDIO){
   $('#openListen').hidden = false;
   $('#openListen').onclick = () => { if ($('#player').hidden){ startListen(); } else { renderListen(); openSheet('#sheetListen'); } };
-  $('#plPlay').onclick = () => { if (!AU.on){ startListen(); return; } const el = auEl(); if (el.paused){ const p = el.play(); if (p && p.catch) p.catch(() => {}); } else el.pause(); };
+  $('#plPlay').onclick = () => { unlockAudio(); if (!AU.on){ startListen(); return; } const el = auEl(); if (el.paused){ const p = el.play(); if (p && p.catch) p.catch(() => {}); } else el.pause(); };
   $('#plPrev').onclick = () => { if (!AU.on) startListen(); else step(-1); };
   $('#plNext').onclick = () => { if (!AU.on) startListen(); else step(1); };
   $('#plClose').onclick = () => stopListen(true);
@@ -1981,7 +2048,8 @@ $('#listenBody').addEventListener('click', e => {
     const k = s.dataset.lset, v = s.dataset.v;
     P[k] = (k === 'rep' || k === 'rate') ? +v : v; savePrefs();
     $$('[data-lset="'+k+'"]').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === v));
-    if (k === 'rate' && AU.el){ AU.el.playbackRate = P.rate; AU.el.defaultPlaybackRate = P.rate; }
+    if (k === 'rate' && AU.els) AU.els.forEach(el => { el.playbackRate = P.rate; el.defaultPlaybackRate = P.rate; });
+    if (k === 'rep' || k === 'endAct'){ AU.prep = null; if (AU.on && AU.cur) prepareNext(AU.cur, AU.tok); }
     if (k === 'aq' && AU.on) loadAndPlay();
     updatePlayerText(); return;
   }
@@ -2101,7 +2169,7 @@ let SEARCH_AR = null, searchArP = null;
 const TN = {}; // normalised translation text per id
 function loadSearchAr(){
   if (SEARCH_AR) return Promise.resolve(SEARCH_AR);
-  if (!searchArP) searchArP = getData(D.data.search).then(j => (SEARCH_AR = j)).catch(e => { searchArP = null; throw e; });
+  if (!searchArP) searchArP = loadData('search').then(j => (SEARCH_AR = j)).catch(e => { searchArP = null; throw e; });
   return searchArP;
 }
 function renderSearch(box, q){
@@ -2125,7 +2193,7 @@ function renderSearch(box, q){
       hits.map(g => { const [s,a] = sOfG(g); return '<button class="sres" data-open="'+s+'" data-a="'+a+'"><span class="t">'+esc(Q[s-1][1])+' '+s+':'+a+'</span>'+
         (scope === 'ar' ? '<span class="ar sar" dir="rtl" lang="ar">'+esc(arText(g))+'</span>' : '<span class="stx" dir="'+(trById(scope).rtl?'rtl':'ltr')+'" lang="'+trById(scope).lang+'">'+mark(TC[scope][g])+'</span>')+'</button>'; }).join('');
   };
-  const fail = () => { if (tok === home.tok) res.innerHTML = '<div class="empty">The search text didn\'t load. Check your connection and try again.</div>'; };
+  const fail = e => { if (tok === home.tok) res.innerHTML = '<div class="empty">'+esc(dataError('The Arabic search text', e))+'</div>'; };
   if (scope === 'ar'){
     const nq = arNorm(q); if (!nq){ res.innerHTML = ''; return; }
     loadSearchAr().then(A => { const hits = []; let total = 0; for (let g=0; g<A.length; g++) if (A[g].includes(nq)){ total++; if (hits.length < 100) hits.push(g); } done(hits, total, x => esc(x)); }).catch(fail);
@@ -2186,11 +2254,32 @@ reader.addEventListener('scroll', () => { if (!bmRaf) bmRaf = setTimeout(() => {
    ========================================================= */
 P.script = ['uthmani','tajweed','indopak'].includes(P.script) ? P.script : 'uthmani';
 const SCRIPT = {tajweed:null, indopak:null}, SCRIPT_P = {};
-function getData(url){ return fetch(url).then(r => { if (!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); }
+function getData(url){ return fetch(url).then(r => { if (!r.ok){ const e = new Error('HTTP '+r.status); e.status = r.status; throw e; } return r.json(); }); }
+/* Backup copies of the IndoPak and search texts, from the open quran-api dataset (website version only) */
+const BACKUP = D.sw ? {indopak:'ara-quranindopak', search:'ara-quransimple'} : {};
+function fromBackup(name){
+  const ed = BACKUP[name]; if (!ed) return Promise.reject(new Error('no backup'));
+  const get = u => getData(u);
+  return get('https://cdn.jsdelivr.net/gh/fawazahmed0/quran-api@1/editions/'+ed+'.min.json').catch(() => get('https://raw.githubusercontent.com/fawazahmed0/quran-api/1/editions/'+ed+'.min.json')).then(j => {
+    const a = new Array(TOTAL_AYAHS).fill('');
+    j.quran.forEach(v => { const g = OFF[v.chapter-1] + v.verse - 1; if (g >= 0 && g < TOTAL_AYAHS) a[g] = v.text; });
+    if (name === 'indopak') return a.map(t => t.replace(/[\u200f\u08e2]/g,'').replace(/\s+/g,' ').trim());
+    const B = arNorm('بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ');
+    return a.map((t, g) => { let n = arNorm(t); if (g > 0 && g !== OFF[8] && OFF.indexOf(g) !== -1 && n.indexOf(B) === 0) n = n.slice(B.length).trim(); return n; });
+  });
+}
+function loadData(name){
+  return getData(D.data[name]).catch(e => fromBackup(name).catch(() => { throw e; }));
+}
 function loadScript(name){
   if (name === 'uthmani' || SCRIPT[name]) return Promise.resolve(SCRIPT[name]);
-  if (!SCRIPT_P[name]) SCRIPT_P[name] = getData(D.data[name]).then(j => (SCRIPT[name] = j)).catch(e => { delete SCRIPT_P[name]; throw e; });
+  if (!SCRIPT_P[name]) SCRIPT_P[name] = loadData(name).then(j => (SCRIPT[name] = j)).catch(e => { delete SCRIPT_P[name]; throw e; });
   return SCRIPT_P[name];
+}
+function dataError(label, e){
+  if (e && e.status === 404) return label+' isn\'t on your website yet. Upload the data folder from the latest zip to GitHub.';
+  if (!navigator.onLine) return label+' needs a connection the first time. Connect once and it will be saved for offline use.';
+  return label+' didn\'t load'+(e && e.message ? ' ('+e.message+')' : '')+'. Try again in a moment.';
 }
 function scriptReady(){ return P.script === 'uthmani' || !!SCRIPT[P.script]; }
 const TJ_NAMES = {m6:['Necessary madd, 6 counts','مد لازم'], m5:['Connected madd, 4 or 5 counts','مد متصل'], m4:['Separated madd, 2, 4 or 5 counts','مد منفصل'], q:['Iqlab','إقلاب'], g:['Ghunnah (nasal sound)','غنة'], k:['Ikhfa (hidden)','إخفاء'], n:['Idgham without ghunnah','إدغام بغير غنة'], l:['Qalqalah (echo)','قلقلة'], m2:['Madd, 2 counts','مد حركتين'], r:['Heavy raa','تفخيم الراء']};
@@ -2374,11 +2463,11 @@ $('#moreBody').addEventListener('click', e => {
 /* Play from a download when there is one */
 async function audioSrc(url){
   if (!CAN_SAVE) return url;
-  try{ const c = await caches.open(AU_CACHE), r = await c.match(url); if (r){ const b = await r.blob(); if (AU.obj) URL.revokeObjectURL(AU.obj); AU.obj = URL.createObjectURL(b); return AU.obj; } }catch(e){}
+  try{ const c = await caches.open(AU_CACHE), r = await c.match(url); if (r){ const b = await r.blob(); return URL.createObjectURL(b); } }catch(e){}
   return url;
 }
 const SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
-function unlockAudio(){ if (AU.unlocked) return; const el = auEl(); try{ el.src = SILENT; const p = el.play(); if (p && p.catch) p.catch(() => {}); }catch(e){} AU.unlocked = true; }
+function unlockAudio(){ if (AU.unlocked) return; auEls().forEach(el => { try{ el.src = SILENT; const p = el.play(); if (p && p.catch) p.catch(() => {}); }catch(e){} }); AU.unlocked = true; }
 
 /* =========================================================
    Start
