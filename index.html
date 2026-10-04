@@ -39,7 +39,7 @@
   --now-bg:rgba(214,177,96,.20); --on-lapis:#0F1620; --good:#7CC096; color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:border-box}
-html{height:100%;background:var(--paper);scroll-padding-top:env(safe-area-inset-top,0px)}
+html{height:100%;touch-action:manipulation;background:var(--paper);scroll-padding-top:env(safe-area-inset-top,0px)}
 body{height:100%;margin:0;background:var(--paper);color:var(--ink);font-family:var(--ui);font-size:17px;line-height:1.45;overflow:hidden;-webkit-tap-highlight-color:transparent}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--lapis);outline-offset:2px;border-radius:8px}
@@ -218,6 +218,8 @@ textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px soli
 .stepper{display:flex;align-items:center;gap:10px}
 .stepper button{width:42px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font-size:20px}
 .stepper output{min-width:46px;text-align:center;font-weight:500}
+.stepper .btn{margin-left:8px;width:auto;height:auto;padding:7px 14px;font-size:15px;border:1.5px solid var(--lapis);border-radius:999px;background:none;color:var(--lapis)}
+.stepper .btn:disabled{opacity:.4;cursor:default}
 select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 10px;width:100%}
 
 /* ---------- Prayer ---------- */
@@ -354,7 +356,7 @@ select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid 
 .sres .sar{display:block;font-size:22px;line-height:1.9;text-align:right}
 .sres .stx{display:block;font-size:16px}
 .sres mark{background:var(--now-bg);color:inherit;border-radius:3px;padding:0 1px}
-select.chip{font-size:15px;padding:7px 10px}
+select.chip{font-size:16px;padding:7px 10px}
 .w.flash{background:var(--now-bg);color:var(--lapis)}
 /* Scripts */
 .script-indopak .text,.script-indopak .ayar,.script-indopak .basmala{font-family:"Lateef","Scheherazade New","Noto Naskh Arabic",serif;font-size:calc(var(--fs,30px) * 1.12);line-height:2.2}
@@ -718,9 +720,12 @@ function hasPlan(range){
   return cut;
 }
 function hasPlanTotal(range){ return Object.values(hasPlan(range)).reduce((a,b) => a+b, 0) * 10; }
+function fillTodayLetters(){ const t = S.days[todayKey()]; if (t && t.let === undefined && !S.letEdit){ let n = 0; dayAySet.forEach(g => { n += lettersOf(g); }); t.let = n; } }
 function removeHas(range){
   const cut = hasPlan(range), total = Object.values(cut).reduce((a,b) => a+b, 0) * 10;
   Object.keys(cut).forEach(k => { S.days[k].let = Math.max(0, (S.days[k].let||0) - cut[k]); });
+  if (range === 'all') Object.values(S.days).forEach(x => { x.let = 0; });
+  else if (range !== 'hour') lastDays(range === 'day' ? 1 : 7).forEach(d => { const x = S.days[dkey(d)]; if (x && x.let === undefined) x.let = 0; });
   if (range === 'all') S.hlog = []; else { const from = Date.now() - RANGE_MS[range]; S.hlog = (S.hlog||[]).filter(x => x[0] < from); }
   S.letEdit = Date.now(); saveStats(true);
   return total;
@@ -1127,6 +1132,8 @@ const LANGS = [];
 TRM.forEach(m => { if (!LANGS.includes(m.langName)) LANGS.push(m.langName); });
 LANGS.sort((a,b) => a === 'English' ? -1 : b === 'English' ? 1 : a.localeCompare(b));
 let trLang = null;
+const FS_DEF = {ar:30, tr:17};
+function syncFsDefaults(){ const a = $('[data-fsdef="ar"]'), t = $('[data-fsdef="tr"]'); if (a) a.disabled = P.fsAr === FS_DEF.ar; if (t) t.disabled = P.fsTr === FS_DEF.tr; }
 function renderDisplay(){
   let h = '<div class="field"><span class="lbl">Layout</span><div class="seg wide" role="group">'+
     '<button data-view="mushaf" aria-pressed="'+(P.view==='mushaf')+'">Arabic only</button>'+
@@ -1137,8 +1144,8 @@ function renderDisplay(){
     '<div class="help">'+({uthmani:'The Madinah (Uthmani) script.', tajweed:'Uthmani script with the main tajweed rules in colour.', indopak:'The script used in mushafs from South Asia.'})[P.script]+'</div>'+
     (P.script === 'tajweed' ? tajweedLegend() : '')+'</div>';
   h += '<div class="field"><span class="lbl">Translations</span><p class="small" style="margin:0 0 8px">'+(P.trans.length ? P.trans.map(id => esc(trById(id).author)).join(', ') : '<span class="muted">None chosen</span>')+'</p><button class="btn small" data-gotr="1">Choose translations</button></div>';
-  h += '<div class="field"><span class="lbl">Arabic text size</span><div class="stepper"><button data-fs="ar" data-d="-2" aria-label="Smaller">−</button><output id="fsArOut">'+P.fsAr+'</output><button data-fs="ar" data-d="2" aria-label="Larger">+</button></div></div>';
-  h += '<div class="field"><span class="lbl">Translation text size</span><div class="stepper"><button data-fs="tr" data-d="-1" aria-label="Smaller">−</button><output id="fsTrOut">'+P.fsTr+'</output><button data-fs="tr" data-d="1" aria-label="Larger">+</button></div></div>';
+  h += '<div class="field"><span class="lbl">Arabic text size</span><div class="stepper"><button data-fs="ar" data-d="-2" aria-label="Smaller">−</button><output id="fsArOut">'+P.fsAr+'</output><button data-fs="ar" data-d="2" aria-label="Larger">+</button><button class="btn small" data-fsdef="ar"'+(P.fsAr===FS_DEF.ar?' disabled':'')+'>Default</button></div></div>';
+  h += '<div class="field"><span class="lbl">Translation text size</span><div class="stepper"><button data-fs="tr" data-d="-1" aria-label="Smaller">−</button><output id="fsTrOut">'+P.fsTr+'</output><button data-fs="tr" data-d="1" aria-label="Larger">+</button><button class="btn small" data-fsdef="tr"'+(P.fsTr===FS_DEF.tr?' disabled':'')+'>Default</button></div></div>';
   h += themeField();
   $('#displayBody').innerHTML = h;
 }
@@ -1169,7 +1176,15 @@ $('#displayBody').addEventListener('click', e => {
   if (f){
     if (f.dataset.fs === 'ar'){ P.fsAr = Math.min(44, Math.max(20, P.fsAr + (+f.dataset.d))); $('#fsArOut').textContent = P.fsAr; }
     else { P.fsTr = Math.min(26, Math.max(13, P.fsTr + (+f.dataset.d))); $('#fsTrOut').textContent = P.fsTr; }
-    savePrefs(); measure(); placeBand(); updateRail();
+    savePrefs(); measure(); placeBand(); updateRail(); syncFsDefaults();
+    return;
+  }
+  const fd = e.target.closest('[data-fsdef]');
+  if (fd && !fd.disabled){
+    if (fd.dataset.fsdef === 'ar'){ P.fsAr = FS_DEF.ar; $('#fsArOut').textContent = P.fsAr; } else { P.fsTr = FS_DEF.tr; $('#fsTrOut').textContent = P.fsTr; }
+    savePrefs(); measure(); syncFsDefaults();
+    if (curEl) requestAnimationFrame(() => { scrollToEl(curEl, 0.32, false); placeBand(); updateRail(); });
+    toast((fd.dataset.fsdef === 'ar' ? 'Arabic' : 'Translation') + ' text back to the default size');
   }
 });
 $('#displayBody').addEventListener('change', e => {
@@ -1669,7 +1684,7 @@ function renderStats(){
   const kp = (v,l) => '<div class="kpi"><b>'+v+'</b><span>'+l+'</span></div>';
   const st = streak();
   // today's letters from before this feature existed: rebuild from the ayahs already read today
-  if (t.let === undefined || (t.let === 0 && t.ay > 0 && dayAySet.size)){ let n = 0; dayAySet.forEach(g => { n += lettersOf(g); }); t.let = n; saveStats(); }
+  if (t.let === undefined && !S.letEdit){ let n = 0; dayAySet.forEach(g => { n += lettersOf(g); }); t.let = n; saveStats(); }
   const wk = days.reduce((n,d) => n + ((S.days[dkey(d)]||{}).let||0), 0);
   let allLet = 0; Object.values(S.days).forEach(x => { allLet += x.let||0; });
   const fmt = n => n.toLocaleString();
@@ -1785,6 +1800,7 @@ function renderSettings(){
   h += themeField();
   h += '<div class="field"><span class="lbl">Rewards counter</span><label class="chk" style="margin:0 -6px"><input type="checkbox" id="setHas"'+(P.showHas !== false ? ' checked' : '')+'><span class="who">Show hasanat on the Progress tab</span></label>'+
     '<div class="help">When this is off, the counter and its chart are hidden. Your reading is still recorded on this device, so turning it back on shows your full count.</div></div>';
+  fillTodayLetters();
   const hp = r => hasPlanTotal(r);
   h += '<div class="field" id="hasRemove"><span class="lbl">Remove hasanat</span><div class="help" style="margin:0 0 10px">For example, if someone else used your phone or you moved your finger without reading. Ayahs read and khatmah progress stay as they are.</div><div class="mrow" style="justify-content:flex-start">'+
     [['hour','Last hour'],['day','Last 24 hours'],['week','Last 7 days'],['all','Clear all']].map(([r,l]) => { const n = hp(r); return '<button class="btn small" data-hrm="'+r+'"'+(n ? '' : ' disabled style="opacity:.45"')+'>'+l+(n ? ' <span class="muted" style="font-weight:400">('+n.toLocaleString()+')</span>' : '')+'</button>'; }).join('')+'</div></div>';
